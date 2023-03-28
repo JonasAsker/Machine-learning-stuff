@@ -1,5 +1,6 @@
 import sys
 import copy
+import itertools as itr
 
 def dataHandler(infile):
     """
@@ -106,15 +107,39 @@ def apriori(dataSet, items, minSup):
     prunedItems - dict with string keys and int values
     infrequentItems - set of strings
     candidates - set of sets of ints
+    allFrequencies - dict with set of ints keys and int values which keeps track
+                    of the support for all frequent sets found
     """
     infrequentItems = set()
+    allFrequencies = dict()
     while True:
         prunedItems, infrequentItems = pruneOnSupport(items, minSup, infrequentItems)
+        allFrequencies.update(prunedItems)
         candidates = candidateGeneration(prunedItems, infrequentItems)
         if not candidates:
             break
         items = getFreqs(candidates, dataSet)
-    return items
+    return allFrequencies
+
+
+def associationRules(frequentPatterns, numTransactions):
+    """
+    frequentPatterns - dict with set of ints keys and int values, the final frequent
+                    patterns and their supports
+    """
+    out = []
+    for pattern in frequentPatterns:
+        k = len(pattern)
+        while k > 1:
+            k -= 1
+            subsets = itr.combinations(pattern, k)
+            for ss in subsets:
+                associativeSet = pattern.difference(ss)
+                ss = frozenset(ss)
+                support = round(100 * (frequentPatterns[pattern] / numTransactions), 2)
+                conf = round(100 * (frequentPatterns[pattern] / frequentPatterns[ss]), 2)
+                out.append((ss, associativeSet, support, conf))
+    return out
 
 
 def writeToFile(items, outfile):
@@ -124,19 +149,24 @@ def writeToFile(items, outfile):
     """
     with open(outfile, 'w') as file:
         for i in items:
-            s = str(i).strip('frozenset()') + '\t' + str(items[i]) + '\n'
+            s = (str(i[0]).strip('frozenset()') + '\t'
+                + str(i[1]).strip('frozenset()') + '\t'
+                + str(i[2]) + '\t'
+                + str(i[3]) + '\n')
             file.write(s)
+            
 
 def main():
     """
     dataset - list of sets of ints
     oneItemFreqs - dict with string keys and int values
     """
-    infile, minSup, outfile = sys.argv[1:]
+    minSup, infile, outfile = sys.argv[1:]
     dataSet, numTransactions = dataHandler(infile)
     minSup = (int(minSup) / 100) * numTransactions 
     oneItemFreqs = getAllItems(dataSet)
-    result = apriori(dataSet, oneItemFreqs, minSup)
-    writeToFile(result, outfile)
+    frequentSets = apriori(dataSet, oneItemFreqs, minSup)
+    associations = associationRules(frequentSets, numTransactions)
+    writeToFile(associations, outfile)
 
 main()
